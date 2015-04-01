@@ -76,9 +76,7 @@ func Scan(slice_iplist, slice_user, slice_pass []string) {
 				host_info.pass = passwd
 				host_info.is_weak = false
 
-				chan_host_info := make(chan HostInfo, 1)
-				chan_host_info <- host_info
-				go Crack(chan_host_info)
+				go Crack(host_info)
 			}
 		}
 	}
@@ -112,8 +110,7 @@ func main() {
 }
 
 // crack passwd
-func Crack(hostinfo chan HostInfo) {
-	host_info := <-hostinfo
+func Crack(host_info HostInfo) {
 	host := host_info.host
 	port := host_info.port
 	user := host_info.user
