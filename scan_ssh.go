@@ -2,11 +2,14 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"github.com/btcsuite/golangcrypto/ssh"
+	"log"
 	"os"
 	"runtime"
 	"strings"
+	"time"
 )
 
 type HostInfo struct {
@@ -17,13 +20,12 @@ type HostInfo struct {
 	is_weak bool
 }
 
-var chan_scan_result chan HostInfo //= make(chan HostInfo, 1000000)
-
 // help function
 func Usage(cmd string) {
 	fmt.Println(strings.Repeat("-", 50))
+	fmt.Println("SSH Scanner by hartnett <x@xsec.io>")
 	fmt.Println("Usage:")
-	fmt.Printf("%s iplist userdic passwddic\n", cmd)
+	fmt.Printf("%s iplist userdic passdic\n", cmd)
 	fmt.Println(strings.Repeat("-", 50))
 }
 
@@ -59,12 +61,12 @@ func Prepare(iplist, user_dict, pass_dict string) (slice_iplist, slice_user, sli
 // Scan function
 func Scan(slice_iplist, slice_user, slice_pass []string) {
 	for _, host_port := range slice_iplist {
-		fmt.Println(host_port)
+		fmt.Printf("Try to crack %s\n", host_port)
 		t := strings.Split(host_port, ":")
 		host := t[0]
 		port := t[1]
-		n := len(slice_user) * len(slice_pass) * len(slice_iplist)
-		chan_scan_result = make(chan HostInfo, n)
+		n := len(slice_user) * len(slice_pass)
+		chan_scan_result := make(chan HostInfo, n)
 
 		for _, user := range slice_user {
 			for _, passwd := range slice_pass {
@@ -76,41 +78,30 @@ func Scan(slice_iplist, slice_user, slice_pass []string) {
 				host_info.pass = passwd
 				host_info.is_weak = false
 
-				go Crack(host_info)
+				go Crack(host_info, chan_scan_result)
+				for runtime.NumGoroutine() > runtime.NumCPU()*200 {
+					time.Sleep(10 * time.Microsecond)
+				}
 			}
 		}
-	}
 
-}
-
-// main function
-func main() {
-	runtime.GOMAXPROCS(runtime.NumCPU())
-
-	if len(os.Args) != 4 {
-		Usage(os.Args[0])
-	} else {
-		iplist := os.Args[1]
-		user_dict := os.Args[2]
-		pass_dict := os.Args[3]
-		// fmt.Println(Prepare(iplist, user_dict, pass_dict))
-		Scan(Prepare(iplist, user_dict, pass_dict))
-		// fmt.Println(len(chan_scan_result))
-		fmt.Println(runtime.NumGoroutine())
-
-		for h := range chan_scan_result {
-			fmt.Println(runtime.NumGoroutine())
-			if h.is_weak {
-				fmt.Println(h)
-				fmt.Println("---------------------------")
+		for i := 0; i < cap(chan_scan_result); i++ {
+			r := <-chan_scan_result
+			// fmt.Println(r)
+			if r.is_weak {
+				var buf bytes.Buffer
+				logger := log.New(&buf, "logger: ", log.Ldate)
+				logger.Printf("%s:%s, user: %s, password: %s\n", r.host, r.port, r.user, r.pass)
+				fmt.Print(&buf)
 			}
 		}
+
 	}
 
 }
 
 // crack passwd
-func Crack(host_info HostInfo) {
+func Crack(host_info HostInfo, chan_scan_result chan HostInfo) {
 	host := host_info.host
 	port := host_info.port
 	user := host_info.user
@@ -125,33 +116,36 @@ func Crack(host_info HostInfo) {
 	}
 	client, err := ssh.Dial("tcp", host+":"+port, config)
 	if err != nil {
-		chan_scan_result <- host_info
-		runtime.Goexit()
+		is_ok = false
 		// panic("Failed to dial: " + err.Error())
+	} else {
+		session, err := client.NewSession()
+		defer session.Close()
+
+		if err != nil {
+			is_ok = false
+		} else {
+			is_ok = true
+
+		}
+
 	}
 
-	// Each ClientConn can support multiple interactive sessions,
-	// represented by a Session.
-	session, err := client.NewSession()
-	defer session.Close()
-	if err != nil {
-		chan_scan_result <- host_info
-		runtime.Goexit()
-	}
-
-	is_ok = true
 	host_info.is_weak = is_ok
 	chan_scan_result <- host_info
+}
 
-	// Once a Session is created, you can execute a single command on
-	// the remote side using the Run method.
-	// var b bytes.Buffer
-	// session.Stdout = &b
-	// if err := session.Run("ifconfig | grep 'inet addr'"); err != nil {
-	// 	result = ""
-	// 	panic("Failed to run: " + err.Error())
-	// }
-	// result = b.String()
+// main function
+func main() {
+	runtime.GOMAXPROCS(runtime.NumCPU())
 
-	// return is_ok, result
+	if len(os.Args) != 4 {
+		Usage(os.Args[0])
+	} else {
+		Usage(os.Args[0])
+		iplist := os.Args[1]
+		user_dict := os.Args[2]
+		pass_dict := os.Args[3]
+		Scan(Prepare(iplist, user_dict, pass_dict))
+	}
 }
