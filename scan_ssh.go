@@ -79,21 +79,36 @@ func Scan(slice_iplist, slice_user, slice_pass []string) {
 				host_info.is_weak = false
 
 				go Crack(host_info, chan_scan_result)
-				for runtime.NumGoroutine() > runtime.NumCPU()*200 {
+				for runtime.NumGoroutine() > runtime.NumCPU()*300 {
 					time.Sleep(10 * time.Microsecond)
 				}
 			}
 		}
+		done := make(chan bool, n)
+		go func() {
+			for i := 0; i < cap(chan_scan_result); i++ {
+				select {
+				case r := <-chan_scan_result:
+					fmt.Println(r)
+					if r.is_weak {
+						var buf bytes.Buffer
+						logger := log.New(&buf, "logger: ", log.Ldate)
+						logger.Printf("%s:%s, user: %s, password: %s\n", r.host, r.port, r.user, r.pass)
+						fmt.Print(&buf)
+					}
+				case <-time.After(1 * time.Second):
+					// fmt.Println("timeout")
+					break
 
-		for i := 0; i < cap(chan_scan_result); i++ {
-			r := <-chan_scan_result
-			// fmt.Println(r)
-			if r.is_weak {
-				var buf bytes.Buffer
-				logger := log.New(&buf, "logger: ", log.Ldate)
-				logger.Printf("%s:%s, user: %s, password: %s\n", r.host, r.port, r.user, r.pass)
-				fmt.Print(&buf)
+				}
+				done <- true
+
 			}
+		}()
+
+		for i := 0; i < cap(done); i++ {
+			// fmt.Println(<-done)
+			<-done
 		}
 
 	}
