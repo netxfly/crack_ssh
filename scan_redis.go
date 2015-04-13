@@ -14,6 +14,7 @@ import (
 type HostInfo struct {
 	host   string
 	port   string
+	reply  string
 	is_vul bool
 }
 
@@ -56,14 +57,20 @@ func Prepare(iplist string) (slice_iplist []string) {
 func TestConnect(host_info HostInfo, chan_result chan HostInfo) {
 	host := host_info.host
 	port := host_info.port
+	reply := host_info.reply
 	is_vul := false
-	_, err := redis.Dial("tcp", host+":"+port)
+	c, err := redis.Dial("tcp", host+":"+port)
 	// _, err := redis.DialTimeout("tcp", host+":"+port, 2*time.Second, 2*time.Second, 2*time.Second)
 	if err == nil {
-		is_vul = true
+		s, err := redis.String(c.Do("ping"))
+		if err == nil {
+			is_vul = true
+			reply = s
+		}
 	}
 
 	host_info.is_vul = is_vul
+	host_info.reply = reply
 	chan_result <- host_info
 
 }
@@ -79,7 +86,7 @@ func Scan(slice_iplist []string) {
 		t := strings.Split(host_port, ":")
 		host := t[0]
 		port := t[1]
-		host_info := HostInfo{host, port, false}
+		host_info := HostInfo{host, port, "", false}
 
 		go TestConnect(host_info, chan_scan_result)
 		for runtime.NumGoroutine() > runtime.NumCPU()*200 {
@@ -93,7 +100,7 @@ func Scan(slice_iplist []string) {
 			select {
 			case r := <-chan_scan_result:
 				if r.is_vul {
-					fmt.Printf("%s:%s is vulnerability\n", r.host, r.port)
+					fmt.Printf("%s:%s is vulnerability, ping's reply: %s\n", r.host, r.port, r.reply)
 				}
 			case <-time.After(3 * time.Second):
 				// fmt.Println("timeout")
