@@ -4,14 +4,16 @@ import (
 	"bufio"
 	"bytes"
 	"fmt"
-	"github.com/btcsuite/golangcrypto/ssh"
 	"log"
 	"os"
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/btcsuite/golangcrypto/ssh"
 )
 
+// HostInfo -
 type HostInfo struct {
 	host    string
 	port    string
@@ -20,7 +22,7 @@ type HostInfo struct {
 	is_weak bool
 }
 
-// help function
+// Usage - help function
 func Usage(cmd string) {
 	fmt.Println(strings.Repeat("-", 50))
 	fmt.Println("SSH Scanner by hartnett <x@xsec.io>")
@@ -29,7 +31,7 @@ func Usage(cmd string) {
 	fmt.Println(strings.Repeat("-", 50))
 }
 
-// read lime from file and Scan
+// Prepare - read lime from file and Scan
 func Prepare(iplist, user_dict, pass_dict string) (slice_iplist, slice_user, slice_pass []string) {
 	iplistFile, _ := os.Open(iplist)
 	defer iplistFile.Close()
@@ -58,7 +60,7 @@ func Prepare(iplist, user_dict, pass_dict string) (slice_iplist, slice_user, sli
 	return slice_iplist, slice_user, slice_pass
 }
 
-// Scan function
+// Scan - scan function
 func Scan(slice_iplist, slice_user, slice_pass []string) {
 	for _, host_port := range slice_iplist {
 		fmt.Printf("Try to crack %s\n", host_port)
@@ -115,7 +117,7 @@ func Scan(slice_iplist, slice_user, slice_pass []string) {
 
 }
 
-// crack passwd
+// Crack - crack passwd
 func Crack(host_info HostInfo, chan_scan_result chan HostInfo) {
 	host := host_info.host
 	port := host_info.port
@@ -128,6 +130,9 @@ func Crack(host_info HostInfo, chan_scan_result chan HostInfo) {
 		Auth: []ssh.AuthMethod{
 			ssh.Password(passwd),
 		},
+		// really brute
+		Timeout:         10 * time.Second,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 	}
 	client, err := ssh.Dial("tcp", host+":"+port, config)
 	if err != nil {
@@ -150,7 +155,6 @@ func Crack(host_info HostInfo, chan_scan_result chan HostInfo) {
 	chan_scan_result <- host_info
 }
 
-// main function
 func main() {
 	runtime.GOMAXPROCS(runtime.NumCPU())
 
