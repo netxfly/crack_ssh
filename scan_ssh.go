@@ -13,7 +13,7 @@ import (
 	"github.com/btcsuite/golangcrypto/ssh"
 )
 
-// HostInfo -
+// HostInfo - host information
 type HostInfo struct {
 	host    string
 	port    string
